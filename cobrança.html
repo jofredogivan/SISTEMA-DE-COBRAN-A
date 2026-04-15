@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTEMA DE COBRANÇA | JAPAN SECURITY</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg: #050505;
+            --card: #111111;
+            --gold: #d4af37;
+            --red: #ff0000;
+            --terminal: #00ff41;
+            --gray: #333;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg);
+            color: #ccc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .system-container {
+            background-color: var(--card);
+            padding: 25px;
+            border: 1px solid var(--gray);
+            border-left: 5px solid var(--red);
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            margin-bottom: 20px;
+        }
+
+        h2 { color: var(--gold); text-align: center; font-size: 1.1rem; letter-spacing: 2px; border-bottom: 1px solid var(--gray); padding-bottom: 10px; text-transform: uppercase; }
+
+        .field { margin-bottom: 15px; }
+        label { display: block; font-size: 0.75rem; color: var(--gold); margin-bottom: 5px; text-transform: uppercase; font-weight: bold; }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            background: #000;
+            border: 1px solid var(--gray);
+            color: var(--terminal);
+            border-radius: 2px;
+            box-sizing: border-box;
+            outline: none;
+            font-family: monospace;
+            font-size: 1rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(to bottom, #444, #222);
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            margin-top: 10px;
+        }
+
+        button:hover { background: var(--gold); color: black; }
+
+        .btn-pay { background: linear-gradient(to bottom, #1a5c1a, #0d2d0d); border-color: var(--terminal); color: var(--terminal); margin-top: 20px; display: none; }
+
+        .status-panel { margin-top: 20px; padding: 15px; background: #000; border: 1px dashed var(--gold); font-size: 0.85rem; display: none; line-height: 1.6; }
+
+        .highlight { color: var(--red); font-weight: bold; }
+
+        #qr-output { margin-top: 20px; background: white; padding: 15px; display: none; justify-content: center; border-radius: 4px; flex-direction: column; align-items: center; }
+
+        .history-container { background-color: var(--card); padding: 20px; border: 1px solid var(--gray); width: 100%; max-width: 450px; border-top: 4px solid var(--gold); }
+        .history-title { color: var(--gold); font-size: 0.9rem; text-align: center; margin-bottom: 15px; text-transform: uppercase; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+        th { text-align: left; color: var(--gold); border-bottom: 1px solid var(--gray); padding: 5px; }
+        td { padding: 8px 5px; border-bottom: 1px solid #222; }
+        .btn-clear { background: transparent; border: 1px solid var(--red); color: var(--red); font-size: 0.6rem; padding: 5px; margin-top: 10px; cursor: pointer; width: auto; }
+    </style>
+</head>
+<body>
+
+<div class="system-container">
+    <h2>CONTROLE DE EMPRÉSTIMO</h2>
+    
+    <div class="field">
+        <label>Chave PIX</label>
+        <input type="text" id="chavePix" placeholder="E-mail, CPF ou Celular">
+    </div>
+
+    <div class="field">
+        <label>Valor da Dívida Total (R$)</label>
+        <input type="number" id="valorDivida" value="3200.00" step="0.01">
+    </div>
+
+    <div class="field">
+        <label>Juros Fixos por Parcela (%)</label>
+        <input type="number" id="taxaJuros" value="20" step="1">
+    </div>
+
+    <div class="field">
+        <label>Dividir em quantas vezes?</label>
+        <select id="parcelas">
+            <option value="1">1x</option>
+            <option value="2">2x</option>
+            <option value="3">3x</option>
+            <option value="4">4x</option>
+            <option value="5">5x</option>
+            <option value="6">6x</option>
+            <option value="7">7x</option>
+            <option value="8">8x</option>
+            <option value="9">9x</option>
+            <option value="10">10x</option>
+        </select>
+    </div>
+
+    <button onclick="gerarCobranca()">Calcular Parcela e QR</button>
+
+    <div id="painel" class="status-panel"></div>
+    
+    <div id="qr-output">
+        <div id="qrcode"></div>
+        <button class="btn-pay" id="btnConfirmar" onclick="salvarPagamento()">Confirmar Recebimento</button>
+    </div>
+</div>
+
+<div class="history-container">
+    <div class="history-title">Log de Recebimentos</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>Info</th>
+                <th>Valor Pago</th>
+            </tr>
+        </thead>
+        <tbody id="listaHistorico"></tbody>
+    </table>
+    <button class="btn-clear" onclick="limparHistorico()">Limpar Log</button>
+</div>
+
+<script>
+    let dadosAtuais = null;
+
+    function gerarCobranca() {
+        const chave = document.getElementById('chavePix').value.trim();
+        const valorOriginal = parseFloat(document.getElementById('valorDivida').value);
+        const porcentagemJuros = parseFloat(document.getElementById('taxaJuros').value);
+        const numParcelas = parseInt(document.getElementById('parcelas').value);
+
+        if (!chave || isNaN(valorOriginal)) {
+            alert("Preencha os campos corretamente.");
+            return;
+        }
+
+        // CÁLCULO SOLICITADO:
+        // (Valor / Parcelas) + (Juros sobre o valor total)
+        const baseParcela = valorOriginal / numParcelas;
+        const valorJurosFixo = valorOriginal * (porcentagemJuros / 100);
+        const valorFinalDaParcela = baseParcela + valorJurosFixo;
+
+        dadosAtuais = {
+            valor: valorFinalDaParcela,
+            plano: `${numParcelas}x`,
+            base: baseParcela,
+            juro: valorJurosFixo
+        };
+
+        const painel = document.getElementById('painel');
+        painel.style.display = 'block';
+        painel.innerHTML = `
+            VALOR BASE: R$ ${baseParcela.toFixed(2)}<br>
+            JURO FIXO (${porcentagemJuros}%): R$ ${valorJurosFixo.toFixed(2)}<br>
+            -------------------------------<br>
+            VALOR DA PARCELA: <span class="highlight">R$ ${valorFinalDaParcela.toFixed(2)}</span>
+        `;
+
+        const v = valorFinalDaParcela.toFixed(2);
+        const payload = `00020101021226580014br.gov.bcb.pix01${chave.length.toString().padStart(2, '0')}${chave}520400005303986540${v.length.toString().padStart(2, '0')}${v}5802BR5922COBRANCA DE EMPRESTIMO6008BRASILIA62070503***6304`;
+
+        const qrDiv = document.getElementById('qrcode');
+        qrDiv.innerHTML = "";
+        document.getElementById('qr-output').style.display = 'flex';
+        document.getElementById('btnConfirmar').style.display = 'block';
+
+        new QRCode(qrDiv, { text: payload, width: 200, height: 200 });
+    }
+
+    function salvarPagamento() {
+        if (!dadosAtuais) return;
+        const agora = new Date();
+        const dataFormatada = agora.toLocaleDateString('pt-BR') + " " + agora.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+
+        const novoRegistro = {
+            data: dataFormatada,
+            info: dadosAtuais.plano,
+            valor: dadosAtuais.valor.toFixed(2)
+        };
+
+        let historico = JSON.parse(localStorage.getItem('hist_emprestimo_v2')) || [];
+        historico.unshift(novoRegistro);
+        localStorage.setItem('hist_emprestimo_v2', JSON.stringify(historico));
+
+        atualizarTabela();
+        alert("Recebimento registrado no sistema!");
+    }
+
+    function atualizarTabela() {
+        const historico = JSON.parse(localStorage.getItem('hist_emprestimo_v2')) || [];
+        const tbody = document.getElementById('listaHistorico');
+        tbody.innerHTML = historico.length === 0 ? "<tr><td colspan='3' style='text-align:center'>Nenhum registro</td></tr>" : "";
+        historico.forEach(item => {
+            tbody.innerHTML += `<tr><td>${item.data}</td><td>${item.info}</td><td class="highlight">R$ ${item.valor}</td></tr>`;
+        });
+    }
+
+    function limparHistorico() {
+        if(confirm("Deseja apagar todos os registros permanentemente?")) { 
+            localStorage.removeItem('hist_emprestimo_v2'); 
+            atualizarTabela(); 
+        }
+    }
+
+    atualizarTabela();
+</script>
+
+</body>
+</html>
