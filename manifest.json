@@ -1,0 +1,16 @@
+{
+  "name": "Sistema de Cobrança Particular",
+  "short_name": "Cobranca",
+  "description": "Gestão de parcelamentos e cobranças com juros",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#ff0000",
+  "icons": [
+    {
+      "src": "icone.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
